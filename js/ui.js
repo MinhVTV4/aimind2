@@ -283,7 +283,7 @@ function addMessageActions(actionsContainer, rawText, messageId) {
     actionsContainer.appendChild(regenerateBtn);
 }
 
-function highlightAllCode(container) {
+export function highlightAllCode(container) {
     container.querySelectorAll('pre code').forEach(block => {
         hljs.highlightElement(block);
         const preElement = block.parentElement;
@@ -301,7 +301,101 @@ function highlightAllCode(container) {
     });
 }
 
-function preprocessText(text) {
+/**
+ * === HÀM ĐÃ ĐƯỢC CHUYỂN VÀO ĐÂY ===
+ * Speaks a given text using the browser's Speech Synthesis API.
+ * @param {string} text - The text to be spoken.
+ * @param {string} lang - The BCP 47 language code (e.g., 'zh-CN', 'ja-JP', 'ko-KR').
+ */
+export function speakText(text, lang) {
+    if (!('speechSynthesis' in window)) {
+        showToast("Trình duyệt không hỗ trợ phát âm.", "error");
+        return;
+    }
+    speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = lang;
+
+    const voices = speechSynthesis.getVoices();
+    const specificVoice = voices.find(voice => voice.lang === lang);
+    if (specificVoice) {
+        utterance.voice = specificVoice;
+    } else {
+        const baseLang = lang.split('-')[0];
+        const fallbackVoice = voices.find(voice => voice.lang.startsWith(baseLang));
+        if (fallbackVoice) utterance.voice = fallbackVoice;
+    }
+
+    utterance.onerror = (event) => {
+        console.error("SpeechSynthesisUtterance error:", event);
+        if (event.error === 'no-speech' || event.error === 'not-allowed') {
+             showToast(`Không tìm thấy hoặc không thể dùng giọng đọc cho ngôn ngữ ${lang}.`, 'error');
+        } else {
+             showToast(`Lỗi phát âm: ${event.error}`, 'error');
+        }
+    };
+    speechSynthesis.speak(utterance);
+}
+
+/**
+ * === HÀM ĐÃ ĐƯỢC CHUYỂN VÀO ĐÂY ===
+ * Finds foreign characters and wraps them in a clickable span for pronunciation.
+ * @param {HTMLElement} container - The element to process.
+ */
+export function makeForeignTextClickable(container) {
+    const foreignRegex = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+/g;
+    const hiraganaKatakanaRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
+    const hangulRegex = /[\uAC00-\uD7AF]/;
+
+    const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT);
+    const nodesToProcess = [];
+    while (walker.nextNode()) nodesToProcess.push(walker.currentNode);
+
+    nodesToProcess.forEach(textNode => {
+        if (textNode.parentElement.closest('script, style, .clickable-foreign')) return;
+
+        const text = textNode.nodeValue;
+        foreignRegex.lastIndex = 0;
+        if (!foreignRegex.test(text)) return;
+        
+        foreignRegex.lastIndex = 0;
+        const fragment = document.createDocumentFragment();
+        let lastIndex = 0;
+        let match;
+
+        while ((match = foreignRegex.exec(text)) !== null) {
+            if (match.index > lastIndex) {
+                fragment.appendChild(document.createTextNode(text.substring(lastIndex, match.index)));
+            }
+            const span = document.createElement('span');
+            span.className = 'clickable-foreign';
+            span.textContent = match[0];
+            if (hangulRegex.test(match[0])) span.dataset.lang = 'ko-KR';
+            else if (hiraganaKatakanaRegex.test(match[0])) span.dataset.lang = 'ja-JP';
+            else span.dataset.lang = 'zh-CN';
+            span.title = `Phát âm (${span.dataset.lang})`;
+            fragment.appendChild(span);
+            lastIndex = foreignRegex.lastIndex;
+        }
+        
+        if (lastIndex < text.length) {
+            fragment.appendChild(document.createTextNode(text.substring(lastIndex)));
+        }
+        
+        if (fragment.hasChildNodes()) {
+             textNode.parentNode.replaceChild(fragment, textNode);
+        }
+    });
+}
+
+/**
+ * === HÀM ĐÃ ĐƯỢC CHUYỂN VÀO ĐÂY ===
+ * Processes raw text for special formatting like learning links and term links.
+ * @param {string} text - The raw text from the AI.
+ * @returns {string} - HTML-formatted string.
+ */
+export function preprocessText(text) {
     const learningLinkRegex = /\[([^\]]+?)\]\{"prompt":"([^"]+?)"\}/g;
     const termLinkRegex = /\[([^\]]+?)\]/g;
     
@@ -338,9 +432,7 @@ export function addMessage(role, text, persona) {
     const messageWrapper = document.createElement('div');
     messageWrapper.dataset.messageId = messageId;
 
-    let contentElem;
-    let statusElem;
-    let actionsContainer = null;
+    let contentElem, statusElem, actionsContainer = null;
 
     if (role === 'ai' || role === 'model') {
         messageWrapper.className = 'w-full space-y-2';
@@ -357,10 +449,11 @@ export function addMessage(role, text, persona) {
         contentElem = messageWrapper.querySelector('.message-content');
         statusElem = messageWrapper.querySelector('.ai-status');
         actionsContainer = messageWrapper.querySelector('.message-actions');
-    } else { // user, note, summary
-        // Simplified structure for non-AI messages
-        messageWrapper.className = `flex ${role === 'user' ? 'justify-end' : ''}`;
-        messageWrapper.innerHTML = `<div class="message-content px-4 py-2 rounded-2xl bg-blue-600 dark:bg-blue-700 text-white max-w-xs sm:max-w-md lg:max-w-2xl"></div>`;
+    } else {
+        const userClass = 'flex justify-end';
+        const noteClass = 'note-wrapper'; // Simplified for example
+        messageWrapper.className = role === 'user' ? userClass : noteClass;
+        messageWrapper.innerHTML = `<div class="message-content px-4 py-2 rounded-2xl bg-blue-600 dark:bg-blue-700 text-white max-w-xs sm:max-w-md lg:max-w-2xl"></div>`; // Simplified
         contentElem = messageWrapper.querySelector('.message-content');
     }
 
