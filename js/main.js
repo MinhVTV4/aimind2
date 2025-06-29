@@ -140,7 +140,7 @@ async function sendMessage(promptTextOverride = null) {
         if (currentPersona?.id === 'language_tutor') {
             ui.makeForeignTextClickable(contentElem);
         }
-        addMessageActions(actionsContainer, fullResponseText, aiMessageId);
+        // addMessageActions(actionsContainer, fullResponseText, aiMessageId); // This was removed in the ui.js fix, let's keep it that way for now.
         
         localHistory.push({ id: aiMessageId, role: 'model', parts: [{ text: fullResponseText }] });
         await updateOrCreateConversation();
@@ -285,13 +285,15 @@ function setupEventListeners() {
     ui.DOM.loginForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         try {
-            await services.handleSignIn(ui.DOM.loginForm['login-email'].value, ui.DOM.loginForm['login-password'].value);
+            const { email, password } = ui.getAuthCredentials('login'); // Sửa lỗi ở đây
+            await services.handleSignIn(email, password);
         } catch (error) { ui.showToast('Email hoặc mật khẩu không đúng.', 'error'); }
     });
     ui.DOM.registerForm.addEventListener('submit', async (e) => {
         e.preventDefault();
         try {
-            await services.handleSignUp(ui.DOM.registerForm['register-email'].value, ui.DOM.registerForm['register-password'].value);
+            const { email, password } = ui.getAuthCredentials('register'); // Sửa lỗi ở đây
+            await services.handleSignUp(email, password);
         } catch (error) { ui.showToast('Không thể tạo tài khoản.', 'error'); }
     });
     ui.DOM.googleLoginBtn.addEventListener('click', services.handleGoogleSignIn);
