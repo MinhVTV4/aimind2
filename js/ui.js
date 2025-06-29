@@ -16,7 +16,12 @@ export const DOM = {
     loginView: document.getElementById('login-view'),
     registerView: document.getElementById('register-view'),
     loginForm: document.getElementById('login-form'),
+    // Bổ sung các ô nhập liệu để truy cập một cách an toàn
+    loginEmailInput: document.getElementById('login-email'),
+    loginPasswordInput: document.getElementById('login-password'),
     registerForm: document.getElementById('register-form'),
+    registerEmailInput: document.getElementById('register-email'),
+    registerPasswordInput: document.getElementById('register-password'),
     googleLoginBtn: document.getElementById('google-login-btn'),
     showRegisterBtn: document.getElementById('show-register'),
     showLoginBtn: document.getElementById('show-login'),
@@ -93,6 +98,27 @@ export const DOM = {
 
 
 // --- Tiện ích Giao diện Chung ---
+
+/**
+ * === HÀM MỚI: Lấy thông tin đăng nhập từ form ===
+ * Đọc và trả về email/mật khẩu từ các ô input tương ứng.
+ * @param {'login' | 'register'} formType - Loại form cần đọc.
+ * @returns {{email: string, password: string}}
+ */
+export function getAuthCredentials(formType) {
+    if (formType === 'login') {
+        return {
+            email: DOM.loginEmailInput.value,
+            password: DOM.loginPasswordInput.value
+        };
+    } else {
+        return {
+            email: DOM.registerEmailInput.value,
+            password: DOM.registerPasswordInput.value
+        };
+    }
+}
+
 
 export function loadIcons() {
     document.querySelectorAll('[data-icon]').forEach(placeholder => {
@@ -177,7 +203,6 @@ export function adjustInputHeight() {
 
 export function showConfirmationModal({ title, message, confirmText = 'Xóa', confirmColor = 'red' }) {
     return new Promise(resolve => {
-        // Lưu trữ hàm resolve để các nút có thể gọi nó
         DOM.confirmationModal.dataset.resolve = 'true'; 
         DOM.confirmationModal._resolver = resolve;
 
@@ -301,12 +326,6 @@ export function highlightAllCode(container) {
     });
 }
 
-/**
- * === HÀM ĐÃ ĐƯỢC CHUYỂN VÀO ĐÂY ===
- * Speaks a given text using the browser's Speech Synthesis API.
- * @param {string} text - The text to be spoken.
- * @param {string} lang - The BCP 47 language code (e.g., 'zh-CN', 'ja-JP', 'ko-KR').
- */
 export function speakText(text, lang) {
     if (!('speechSynthesis' in window)) {
         showToast("Trình duyệt không hỗ trợ phát âm.", "error");
@@ -338,11 +357,6 @@ export function speakText(text, lang) {
     speechSynthesis.speak(utterance);
 }
 
-/**
- * === HÀM ĐÃ ĐƯỢC CHUYỂN VÀO ĐÂY ===
- * Finds foreign characters and wraps them in a clickable span for pronunciation.
- * @param {HTMLElement} container - The element to process.
- */
 export function makeForeignTextClickable(container) {
     const foreignRegex = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]+/g;
     const hiraganaKatakanaRegex = /[\u3040-\u309F\u30A0-\u30FF]/;
@@ -389,12 +403,6 @@ export function makeForeignTextClickable(container) {
     });
 }
 
-/**
- * === HÀM ĐÃ ĐƯỢC CHUYỂN VÀO ĐÂY ===
- * Processes raw text for special formatting like learning links and term links.
- * @param {string} text - The raw text from the AI.
- * @returns {string} - HTML-formatted string.
- */
 export function preprocessText(text) {
     const learningLinkRegex = /\[([^\]]+?)\]\{"prompt":"([^"]+?)"\}/g;
     const termLinkRegex = /\[([^\]]+?)\]/g;
@@ -449,10 +457,8 @@ export function addMessage(role, text, persona) {
         contentElem = messageWrapper.querySelector('.message-content');
         statusElem = messageWrapper.querySelector('.ai-status');
         actionsContainer = messageWrapper.querySelector('.message-actions');
-    } else {
-        const userClass = 'flex justify-end';
-        const noteClass = 'note-wrapper'; // Simplified for example
-        messageWrapper.className = role === 'user' ? userClass : noteClass;
+    } else { // user, note, summary
+        messageWrapper.className = `flex ${role === 'user' ? 'justify-end' : ''}`;
         messageWrapper.innerHTML = `<div class="message-content px-4 py-2 rounded-2xl bg-blue-600 dark:bg-blue-700 text-white max-w-xs sm:max-w-md lg:max-w-2xl"></div>`; // Simplified
         contentElem = messageWrapper.querySelector('.message-content');
     }
