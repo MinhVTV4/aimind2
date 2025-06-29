@@ -107,7 +107,9 @@ async function sendMessage(promptTextOverride = null) {
             .map(({ role, parts }) => ({ role, parts }));
         
         let finalPrompt = userDisplayedText;
-        // Logic cho chế độ học tập có thể được thêm vào đây nếu cần
+        if (isLearningMode && !promptTextOverride) {
+            finalPrompt = `${LEARNING_MODE_SYSTEM_PROMPT}\n\nYêu cầu của người học: "${userDisplayedText}"`;
+        }
 
         const stream = await services.streamAiResponse(finalPrompt, historyForThisCall);
         
@@ -119,9 +121,9 @@ async function sendMessage(promptTextOverride = null) {
                 isFirstChunk = false;
             }
             fullResponseText += chunk.text();
-            // Cập nhật UI trong khi stream
+            
             const processedChunk = ui.preprocessText(fullResponseText + '<span class="blinking-cursor"></span>');
-            contentElem.innerHTML = DOMPurify.sanitize(marked.parse(processedChunk));
+            contentElem.innerHTML = DOMPurify.sanitize(marked.parse(processedChunk), { ADD_ATTR: ['target', 'data-term', 'data-prompt', 'data-lang'] });
             ui.highlightAllCode(contentElem);
             if (currentPersona?.id === 'language_tutor') {
                 ui.makeForeignTextClickable(contentElem);
@@ -131,26 +133,27 @@ async function sendMessage(promptTextOverride = null) {
 
         if (statusElem) statusElem.classList.add('hidden');
         
-        // Hoàn tất và xử lý lần cuối
         const finalProcessedText = ui.preprocessText(fullResponseText);
-        contentElem.innerHTML = DOMPurify.sanitize(marked.parse(finalProcessedText));
+        contentElem.innerHTML = DOMPurify.sanitize(marked.parse(finalProcessedText), { ADD_ATTR: ['target', 'data-term', 'data-prompt', 'data-lang'] });
         contentElem.dataset.rawText = fullResponseText;
         ui.highlightAllCode(contentElem);
         if (currentPersona?.id === 'language_tutor') {
             ui.makeForeignTextClickable(contentElem);
         }
-        ui.addMessageActions(actionsContainer, fullResponseText, aiMessageId);
+        addMessageActions(actionsContainer, fullResponseText, aiMessageId);
         
         localHistory.push({ id: aiMessageId, role: 'model', parts: [{ text: fullResponseText }] });
         await updateOrCreateConversation();
 
-        const suggestions = await services.getQuickAiResponse(`Dựa vào câu trả lời sau: "${fullResponseText.substring(0, 500)}". Hãy đề xuất 3 câu hỏi tiếp theo ngắn gọn và thú vị. Chỉ trả về 3 câu hỏi, mỗi câu trên một dòng. Không đánh số, không dùng gạch đầu dòng.`);
-        ui.displaySuggestions(suggestions.split('\n').filter(s => s.trim()), sendMessage);
+        if (!isLearningMode) {
+             const suggestions = await services.getQuickAiResponse(`Dựa vào câu trả lời sau: "${fullResponseText.substring(0, 500)}". Hãy đề xuất 3 câu hỏi tiếp theo ngắn gọn và thú vị. Chỉ trả về 3 câu hỏi, mỗi câu trên một dòng. Không đánh số, không dùng gạch đầu dòng.`);
+             ui.displaySuggestions(suggestions.split('\n').filter(s => s.trim()), sendMessage);
+        }
 
     } catch (error) {
         console.error("Lỗi khi gửi tin nhắn:", error);
         contentElem.innerHTML = `**Lỗi:** ${error.message}`;
-        localHistory.pop(); // Xóa tin nhắn người dùng nếu có lỗi
+        localHistory.pop();
         ui.showToast(`Lỗi gửi tin nhắn: ${error.message}`, 'error');
     } finally {
         ui.DOM.sendBtn.disabled = false;
@@ -335,14 +338,14 @@ function setupEventListeners() {
         if (e.target === ui.DOM.confirmationModalOverlay) ui.hideConfirmationModal(false);
     });
     
-    // Chat container event delegation
+    // Chat container event delegation for dynamic elements
     ui.DOM.chatContainer.addEventListener('click', (e) => {
         const target = e.target;
         if (target.closest('.copy-btn')) {
             ui.copyToClipboard(target.closest('.copy-btn').dataset.text);
         } else if (target.closest('.clickable-foreign')) {
             const foreignWord = target.closest('.clickable-foreign');
-            speakText(foreignWord.textContent, foreignWord.dataset.lang);
+            ui.speakText(foreignWord.textContent, foreignWord.dataset.lang);
         }
     });
 }
@@ -373,9 +376,9 @@ async function handleDeleteChat(chatId) {
             if (chatId === currentChatId) {
                 currentChatId = null;
                 localHistory = [];
-                showPersonaSelectionView();
+                await showPersonaSelectionView();
             } else {
-                renderChatHistory();
+                await renderChatHistory();
             }
         } catch (error) {
             ui.showToast("Lỗi khi xóa.", "error");
@@ -387,7 +390,7 @@ async function handlePinChat(chatId, isPinned) {
      try {
         await services.togglePinChatInDb(currentUserId, chatId, !isPinned);
         ui.showToast(isPinned ? "Đã bỏ ghim." : "Đã ghim.", "info");
-        renderChatHistory();
+        await renderChatHistory();
     } catch (error) {
         ui.showToast("Lỗi khi ghim/bỏ ghim.", "error");
     }
@@ -422,7 +425,7 @@ async function handleDeletePersona(personaId, personaName) {
         try {
             await services.deletePersona(currentUserId, personaId);
             ui.showToast("Persona đã được xóa.", "success");
-            showPersonaSelectionView();
+            await showPersonaSelectionView();
         } catch (error) {
             ui.showToast("Lỗi khi xóa persona.", "error");
         }
